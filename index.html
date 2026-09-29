@@ -378,8 +378,9 @@
       if (showGrid) {
         const colWidth = rect.width / COLS;
         const rowHeight = rect.height / ROWS;
-        finalX = Math.floor(x / colWidth) * colWidth + (colWidth / 2);
-        finalY = Math.floor(y / rowHeight) * rowHeight + (rowHeight / 2);
+        // Snap directly to the musical beat (the grid lines)
+        finalX = Math.round(x / colWidth) * colWidth;
+        finalY = Math.round(y / rowHeight) * rowHeight;
       }
       
       const xPercent = finalX / rect.width;
