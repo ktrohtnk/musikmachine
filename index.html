@@ -347,15 +347,19 @@
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
       
-      // Snap logic
-      const colWidth = rect.width / COLS;
-      const rowHeight = rect.height / ROWS;
+      // Snap logic conditional on Grid visibility
+      let finalX = x;
+      let finalY = y;
       
-      const snappedX = Math.floor(x / colWidth) * colWidth + (colWidth / 2);
-      const snappedY = Math.floor(y / rowHeight) * rowHeight + (rowHeight / 2);
+      if (showGrid) {
+        const colWidth = rect.width / COLS;
+        const rowHeight = rect.height / ROWS;
+        finalX = Math.floor(x / colWidth) * colWidth + (colWidth / 2);
+        finalY = Math.floor(y / rowHeight) * rowHeight + (rowHeight / 2);
+      }
       
-      const xPercent = snappedX / rect.width;
-      const yPercent = snappedY / rect.height;
+      const xPercent = finalX / rect.width;
+      const yPercent = finalY / rect.height;
 
       createEvent(xPercent, yPercent, currentSoundType);
     });
