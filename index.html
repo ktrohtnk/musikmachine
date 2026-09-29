@@ -105,10 +105,12 @@
       cursor: crosshair;
       touch-action: none; /* Prevents scroll on swipe */
       background-size: calc(100% / 16) calc(100% / 12);
+      background-position: -1px -1px;
+    }
+    #canvas.show-grid {
       background-image: 
         linear-gradient(to right, rgba(0, 0, 0, 0.08) 1px, transparent 1px),
         linear-gradient(to bottom, rgba(0, 0, 0, 0.08) 1px, transparent 1px);
-      background-position: -1px -1px;
     }
 
     /* Sweeping Playhead */
@@ -139,6 +141,7 @@
     .shape-sub { width: 100%; height: 8px; background: var(--c-black); left: 0 !important; transform: translateY(-50%); }
     .shape-fm { width: 35px; height: 35px; background: repeating-linear-gradient(45deg, var(--c-yellow), var(--c-yellow) 4px, var(--bg-color) 4px, var(--bg-color) 8px); border: 2px solid var(--c-black); }
     .shape-error { font-size: 40px; font-weight: bold; color: var(--c-black); line-height: 1; }
+    .shape-drone { width: 80px; height: 80px; border: 6px solid var(--c-black); border-radius: 10px; background: repeating-linear-gradient(90deg, transparent, transparent 4px, rgba(0,0,0,0.1) 4px, rgba(0,0,0,0.1) 8px); }
 
     .glitch-trigger { transform: translate(-50%, -50%) scale(1.4) skewX(20deg) !important; filter: invert(100%); }
     .shape-sub.glitch-trigger { transform: translateY(-50%) scaleY(3) !important; }
@@ -170,6 +173,7 @@
     <!-- Toolbar Menu -->
     <div class="menu">
       <div id="transport" class="menu-btn justify-center" style="flex-basis:100%; font-size: 14px;">▶ Start</div>
+      <div id="grid-toggle" class="menu-btn justify-center" style="flex-basis:100%; background: #E5E5E5; font-size: 10px;">Grid: OFF</div>
       <div class="menu-btn active" data-type="sine">
         <div style="width:12px;height:12px;background:var(--c-red);border-radius:50%;"></div>
         Sine Ping
@@ -189,6 +193,10 @@
       <div class="menu-btn" data-type="error">
         <span style="font-size:12px;font-weight:bold;line-height:1;">X</span>
         Data Error
+      </div>
+      <div class="menu-btn" data-type="drone">
+        <div style="width:14px;height:14px;background:transparent;border:2px solid var(--c-black);border-radius:2px;"></div>
+        Drone
       </div>
       <div class="menu-btn" data-type="sub">
         <div style="width:14px;height:3px;background:var(--c-black);"></div>
@@ -211,7 +219,7 @@
 
     <!-- FX Bar -->
     <div class="controls-bar" style="background: var(--c-black); color: var(--bg-color);">
-      <span class="hidden md:inline">FX:</span>
+      <span class="hidden md:inline" id="fx-label">FX (SINE PING):</span>
       <label style="display:flex; align-items:center; gap:4px;">
         Rev <input type="range" id="fx-reverb" min="0" max="100" value="0" style="accent-color: var(--c-red);">
       </label>
@@ -258,34 +266,37 @@
     }
     
     let audioCtx;
-    let masterBus, distWet, distDry, tremoloGain, tremoloDepthNode, delaySend, reverbSend;
+    let distBus, tremoloBus, delayBus, reverbBus;
+    let isPlaying = false;
+    let showGrid = false;
+    let events = []; // { id, type, xPercent, yPercent, el, scheduledLoopCount }
+    let currentSoundType = 'sine';
+
+    // Per-sound FX Settings
+    const fxSettings = {
+      sine: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
+      noise: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
+      pop: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
+      fm: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
+      error: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
+      drone: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
+      sub: { reverb: 0, delay: 0, tremolo: 0, dist: 0 }
+    };
     
     // FX Listeners
     document.getElementById('fx-reverb').addEventListener('input', (e) => {
-      if(reverbSend) reverbSend.gain.value = e.target.value / 100;
+      fxSettings[currentSoundType].reverb = parseInt(e.target.value);
     });
     document.getElementById('fx-delay').addEventListener('input', (e) => {
-      if(delaySend) delaySend.gain.value = e.target.value / 100;
+      fxSettings[currentSoundType].delay = parseInt(e.target.value);
     });
     document.getElementById('fx-tremolo').addEventListener('input', (e) => {
-      if(tremoloDepthNode && tremoloGain) {
-        const val = e.target.value / 100;
-        tremoloDepthNode.gain.value = val;
-        tremoloGain.gain.value = 1.0 - (val / 2); // Compensate volume
-      }
+      fxSettings[currentSoundType].tremolo = parseInt(e.target.value);
     });
     document.getElementById('fx-dist').addEventListener('input', (e) => {
-      if(distWet && distDry) {
-        const val = e.target.value / 100;
-        distWet.gain.value = val;
-        distDry.gain.value = 1.0 - val;
-      }
+      fxSettings[currentSoundType].dist = parseInt(e.target.value);
     });
 
-    let isPlaying = false;
-    let events = []; // { id, type, xPercent, yPercent, el, scheduledLoopCount }
-    let currentSoundType = 'sine';
-    
     let loopCount = 0;
     let startTime = 0;
     let requestAnimId;
@@ -300,7 +311,29 @@
         document.querySelectorAll('.menu-btn[data-type]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentSoundType = btn.dataset.type;
+        
+        // Update FX sliders to match selected sound
+        const typeFx = fxSettings[currentSoundType];
+        document.getElementById('fx-reverb').value = typeFx.reverb;
+        document.getElementById('fx-delay').value = typeFx.delay;
+        document.getElementById('fx-tremolo').value = typeFx.tremolo;
+        document.getElementById('fx-dist').value = typeFx.dist;
+        document.getElementById('fx-label').innerText = `FX (${currentSoundType.toUpperCase()}):`;
       });
+    });
+
+    // Grid Toggle
+    document.getElementById('grid-toggle').addEventListener('click', () => {
+      showGrid = !showGrid;
+      if (showGrid) {
+        canvas.classList.add('show-grid');
+        document.getElementById('grid-toggle').style.background = 'var(--c-yellow)';
+        document.getElementById('grid-toggle').innerText = 'Grid: ON';
+      } else {
+        canvas.classList.remove('show-grid');
+        document.getElementById('grid-toggle').style.background = '#E5E5E5';
+        document.getElementById('grid-toggle').innerText = 'Grid: OFF';
+      }
     });
 
     document.getElementById('clear-btn').addEventListener('click', () => {
@@ -382,73 +415,54 @@
       if(audioCtx) return;
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       
-      masterBus = audioCtx.createGain();
-      
-      // 1. Distortion Insert (Muffled Analog)
+      // 1. Dist Bus (Parallel)
+      distBus = audioCtx.createGain();
       const distShaper = audioCtx.createWaveShaper();
       distShaper.curve = makeDistortionCurve(100);
       const distFilter = audioCtx.createBiquadFilter();
       distFilter.type = 'lowpass';
-      distFilter.frequency.value = 600; // Muffled tone
+      distFilter.frequency.value = 600;
       
-      distDry = audioCtx.createGain();
-      distWet = audioCtx.createGain();
-      distWet.gain.value = document.getElementById('fx-dist').value / 100;
-      distDry.gain.value = 1.0 - distWet.gain.value;
-      
-      masterBus.connect(distDry);
-      masterBus.connect(distShaper);
+      distBus.connect(distShaper);
       distShaper.connect(distFilter);
-      distFilter.connect(distWet);
+      distFilter.connect(audioCtx.destination);
       
-      const postDist = audioCtx.createGain();
-      distDry.connect(postDist);
-      distWet.connect(postDist);
+      // 2. Tremolo Bus (Parallel volume modulation)
+      tremoloBus = audioCtx.createGain();
+      const tremLfo = audioCtx.createOscillator();
+      tremLfo.frequency.value = 6;
       
-      // 2. Tremolo Insert
-      tremoloGain = audioCtx.createGain();
-      const tremoloVal = document.getElementById('fx-tremolo').value / 100;
-      tremoloGain.gain.value = 1.0 - (tremoloVal / 2);
+      const tremMod = audioCtx.createGain();
+      tremMod.gain.value = 0.5; // Base volume
       
-      const tremoloLfo = audioCtx.createOscillator();
-      tremoloLfo.frequency.value = 6; // 6Hz
+      const lfoGain = audioCtx.createGain();
+      lfoGain.gain.value = 0.5;
+      tremLfo.connect(lfoGain);
+      lfoGain.connect(tremMod.gain);
+      tremLfo.start();
       
-      tremoloDepthNode = audioCtx.createGain();
-      tremoloDepthNode.gain.value = tremoloVal;
-      
-      tremoloLfo.connect(tremoloDepthNode);
-      tremoloDepthNode.connect(tremoloGain.gain);
-      tremoloLfo.start();
-      
-      postDist.connect(tremoloGain);
-      const postInsert = tremoloGain;
+      tremoloBus.connect(tremMod);
+      tremMod.connect(audioCtx.destination);
 
-      // 3. Delay Send
-      delaySend = audioCtx.createGain();
-      delaySend.gain.value = document.getElementById('fx-delay').value / 100;
+      // 3. Delay Bus
+      delayBus = audioCtx.createGain();
       const delayNode = audioCtx.createDelay(2.0);
-      delayNode.delayTime.value = 0.35; // 350ms
+      delayNode.delayTime.value = 0.35;
       const delayFeedback = audioCtx.createGain();
-      delayFeedback.gain.value = 0.5; // feedback
+      delayFeedback.gain.value = 0.5;
       
-      postInsert.connect(delaySend);
-      delaySend.connect(delayNode);
+      delayBus.connect(delayNode);
       delayNode.connect(delayFeedback);
       delayFeedback.connect(delayNode);
       delayNode.connect(audioCtx.destination);
       
-      // 4. Reverb Send
-      reverbSend = audioCtx.createGain();
-      reverbSend.gain.value = document.getElementById('fx-reverb').value / 100;
+      // 4. Reverb Bus
+      reverbBus = audioCtx.createGain();
       const reverbNode = audioCtx.createConvolver();
       reverbNode.buffer = createReverbIR(audioCtx);
       
-      postInsert.connect(reverbSend);
-      reverbSend.connect(reverbNode);
+      reverbBus.connect(reverbNode);
       reverbNode.connect(audioCtx.destination);
-      
-      // Dry output
-      postInsert.connect(audioCtx.destination);
     }
 
     function makeDistortionCurve(amount) {
@@ -528,10 +542,11 @@
 
     function scheduleSound(ev, time) {
       const { type, yPercent } = ev;
-      
-      // Pitch/Filter based on Y position (0 = top/high, 1 = bottom/low)
       const invY = 1.0 - yPercent;
-      const pitchRatio = getPitchRatio(); // Apply global tone pitch
+      const pitchRatio = getPitchRatio();
+      const typeFx = fxSettings[type];
+      
+      const eventOutput = audioCtx.createGain();
 
       if (type === 'sine') {
         // High-pitched 5ms sine burst
@@ -540,7 +555,7 @@
         osc.type = 'sine';
         osc.frequency.value = (1000 + (invY * 4000)) * pitchRatio; // 1k to 5k
         osc.connect(gain);
-        gain.connect(masterBus);
+        gain.connect(eventOutput);
         
         gain.gain.setValueAtTime(0, time);
         gain.gain.linearRampToValueAtTime(0.8, time + 0.001);
@@ -571,7 +586,7 @@
         
         noise.connect(filter);
         filter.connect(gain);
-        gain.connect(masterBus);
+        gain.connect(eventOutput);
         noise.start(time);
       }
       
@@ -589,7 +604,7 @@
         gain.gain.exponentialRampToValueAtTime(0.001, time + 0.005);
         
         osc.connect(gain);
-        gain.connect(masterBus);
+        gain.connect(eventOutput);
         osc.start(time);
         osc.stop(time + 0.01);
       }
@@ -615,7 +630,7 @@
         modGain.connect(carrier.frequency);
         
         carrier.connect(outGain);
-        outGain.connect(masterBus);
+        outGain.connect(eventOutput);
         
         outGain.gain.setValueAtTime(0, time);
         outGain.gain.linearRampToValueAtTime(0.6, time + 0.005);
@@ -646,7 +661,7 @@
         
         osc.connect(shaper);
         shaper.connect(gain);
-        gain.connect(masterBus);
+        gain.connect(eventOutput);
         
         gain.gain.setValueAtTime(0.2, time);
         gain.gain.setValueAtTime(0, time + 0.02); // 20ms burst
@@ -665,13 +680,82 @@
         osc.frequency.setValueAtTime(freq, time);
         
         osc.connect(gain);
-        gain.connect(masterBus);
+        gain.connect(eventOutput);
         
         gain.gain.setValueAtTime(0.8, time);
         gain.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
         
         osc.start(time);
         osc.stop(time + 0.4);
+      }
+      
+      else if (type === 'drone') {
+        const osc1 = audioCtx.createOscillator();
+        const osc2 = audioCtx.createOscillator();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+        
+        osc1.type = 'sawtooth';
+        osc2.type = 'square';
+        
+        const freq = (25 + (invY * 50)) * pitchRatio;
+        osc1.frequency.value = freq;
+        osc2.frequency.value = freq * 1.01;
+        
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(100, time);
+        filter.frequency.exponentialRampToValueAtTime(800 + (invY*1000), time + 0.1);
+        filter.frequency.exponentialRampToValueAtTime(100, time + (LOOP_TIME * 0.8));
+        
+        osc1.connect(filter);
+        osc2.connect(filter);
+        filter.connect(gain);
+        gain.connect(eventOutput);
+        
+        gain.gain.setValueAtTime(0.001, time);
+        gain.gain.linearRampToValueAtTime(0.6, time + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + LOOP_TIME);
+        
+        osc1.start(time);
+        osc2.start(time);
+        osc1.stop(time + LOOP_TIME);
+        osc2.stop(time + LOOP_TIME);
+      }
+
+      // Route eventOutput to FX buses
+      const distVal = typeFx.dist / 100;
+      const tremVal = typeFx.tremolo / 100;
+      const delVal = typeFx.delay / 100;
+      const revVal = typeFx.reverb / 100;
+
+      const dryGain = audioCtx.createGain();
+      dryGain.gain.value = (1.0 - distVal) * (1.0 - (tremVal / 2));
+      eventOutput.connect(dryGain);
+      dryGain.connect(audioCtx.destination);
+
+      if (distVal > 0) {
+        const send = audioCtx.createGain();
+        send.gain.value = distVal;
+        eventOutput.connect(send);
+        send.connect(distBus);
+      }
+      if (tremVal > 0) {
+        const send = audioCtx.createGain();
+        send.gain.value = tremVal;
+        eventOutput.connect(send);
+        send.connect(tremoloBus);
+      }
+      if (delVal > 0) {
+        const send = audioCtx.createGain();
+        send.gain.value = delVal;
+        eventOutput.connect(send);
+        send.connect(delayBus);
+      }
+      if (revVal > 0) {
+        const send = audioCtx.createGain();
+        send.gain.value = revVal;
+        eventOutput.connect(send);
+        send.connect(reverbBus);
       }
     }
 
