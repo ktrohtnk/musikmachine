@@ -104,7 +104,7 @@
       overflow: hidden;
       cursor: crosshair;
       touch-action: none; /* Prevents scroll on swipe */
-      background-size: calc(100% / 16) calc(100% / 12);
+      background-size: calc(100% / 32) calc(100% / 24);
       background-position: -1px -1px;
     }
     #canvas.show-grid {
@@ -251,8 +251,8 @@
     let LOOP_TIME = (60 / BPM) * 4; // 4 beats per cycle
     let globalPitchShift = 0; // Semitones shift
 
-    const COLS = 16;
-    const ROWS = 12;
+    const COLS = 32;
+    const ROWS = 24;
 
     // Settings listeners
     document.getElementById('bpm-slider').addEventListener('input', (e) => {
