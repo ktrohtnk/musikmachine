@@ -131,8 +131,9 @@
       position: absolute;
       transform: translate(-50%, -50%);
       mix-blend-mode: multiply;
-      pointer-events: none;
+      pointer-events: auto;
       transition: transform 0.05s ease-out, filter 0.05s;
+      cursor: pointer;
     }
 
     .shape-sine { width: 40px; height: 40px; background: var(--c-red); border-radius: 50%; }
@@ -201,6 +202,10 @@
       <div class="menu-btn" data-type="sub">
         <div style="width:14px;height:3px;background:var(--c-black);"></div>
         Sub Line
+      </div>
+      <div class="menu-btn" data-type="eraser">
+        <span style="font-size:14px;line-height:1;">⌫</span>
+        Eraser
       </div>
       <div class="menu-btn justify-center" id="clear-btn" style="background:#E5E5E5;">
         Clear All
@@ -296,7 +301,8 @@
       fm: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
       error: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
       drone: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
-      sub: { reverb: 0, delay: 0, tremolo: 0, dist: 0 }
+      sub: { reverb: 0, delay: 0, tremolo: 0, dist: 0 },
+      eraser: { reverb: 0, delay: 0, tremolo: 0, dist: 0 }
     };
     
     // FX Listeners
@@ -359,6 +365,8 @@
 
     // Place Object on Canvas (with snap to grid)
     canvas.addEventListener('pointerdown', (e) => {
+      if (currentSoundType === 'eraser') return; // Do nothing on empty canvas
+      
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
@@ -394,9 +402,19 @@
       el.style.top = `${yPercent * 100}%`;
       
       canvas.appendChild(el);
+      
+      const eventId = Date.now() + Math.random();
+      
+      el.addEventListener('pointerdown', (ev) => {
+        if (currentSoundType === 'eraser') {
+          ev.stopPropagation(); // prevent placing a new sound
+          el.remove();
+          events = events.filter(e => e.id !== eventId);
+        }
+      });
 
       events.push({
-        id: Date.now() + Math.random(),
+        id: eventId,
         type,
         xPercent,
         yPercent,
