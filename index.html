@@ -703,26 +703,27 @@
         osc2.frequency.value = freq * 1.01;
         
         filter.type = 'lowpass';
-        // Sustained filter with slow organic breathing
-        filter.frequency.setValueAtTime(300 + (invY*400), time);
-        filter.frequency.linearRampToValueAtTime(600 + (invY*600), time + (LOOP_TIME / 2));
-        filter.frequency.linearRampToValueAtTime(300 + (invY*400), time + LOOP_TIME);
+        // Much darker filter to remove harshness
+        filter.frequency.setValueAtTime(100 + (invY*200), time);
+        filter.frequency.linearRampToValueAtTime(200 + (invY*300), time + (LOOP_TIME / 2));
+        filter.frequency.linearRampToValueAtTime(100 + (invY*200), time + LOOP_TIME);
         
         osc1.connect(filter);
         osc2.connect(filter);
         filter.connect(gain);
         gain.connect(eventOutput);
         
-        // Continuous Sustain with crossfade at the loop boundary
+        // Lower volume and very long crossfade to eliminate any "attack" pulse
+        const maxVol = 0.15;
         gain.gain.setValueAtTime(0, time);
-        gain.gain.linearRampToValueAtTime(0.4, time + 0.1); // Fade in
-        gain.gain.setValueAtTime(0.4, time + LOOP_TIME - 0.1); // Sustain level
-        gain.gain.linearRampToValueAtTime(0, time + LOOP_TIME + 0.1); // Fade out
+        gain.gain.linearRampToValueAtTime(maxVol, time + 0.5); // Very slow fade in
+        gain.gain.setValueAtTime(maxVol, time + LOOP_TIME - 0.5);
+        gain.gain.linearRampToValueAtTime(0, time + LOOP_TIME + 0.5); // Very slow fade out
         
         osc1.start(time);
         osc2.start(time);
-        osc1.stop(time + LOOP_TIME + 0.2);
-        osc2.stop(time + LOOP_TIME + 0.2);
+        osc1.stop(time + LOOP_TIME + 0.6);
+        osc2.stop(time + LOOP_TIME + 0.6);
       }
 
       // Route eventOutput to FX buses
