@@ -251,9 +251,25 @@
 
     // Settings listeners
     document.getElementById('bpm-slider').addEventListener('input', (e) => {
-      BPM = parseInt(e.target.value);
-      document.getElementById('bpm-val').textContent = BPM;
-      LOOP_TIME = (60 / BPM) * 4;
+      const newBPM = parseInt(e.target.value);
+      document.getElementById('bpm-val').textContent = newBPM;
+      
+      const newLoopTime = (60 / newBPM) * 4;
+      
+      if (isPlaying && audioCtx) {
+        const currentTime = audioCtx.currentTime - startTime;
+        const currentLoopPos = currentTime % LOOP_TIME;
+        const currentLoopCount = Math.floor(currentTime / LOOP_TIME);
+        
+        const progress = currentLoopPos / LOOP_TIME;
+        const newLoopPos = progress * newLoopTime;
+        const newCurrentTime = (currentLoopCount * newLoopTime) + newLoopPos;
+        
+        startTime = audioCtx.currentTime - newCurrentTime;
+      }
+      
+      BPM = newBPM;
+      LOOP_TIME = newLoopTime;
     });
 
     document.getElementById('pitch-slider').addEventListener('input', (e) => {
