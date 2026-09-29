@@ -2,17 +2,18 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>Avant-Garde Micro-Sequencer</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
 
     :root {
-      --bg-color: #EBE9E1; /* Aged paper / warm grey */
-      --c-red: #D22B1F;    /* Avant-Garde Red */
-      --c-black: #1A1A1A;  /* Deep Black */
-      --c-blue: #2B4C7E;   /* Overprint Blue */
-      --c-yellow: #E6B522; /* Industrial Yellow */
+      --bg-color: #EBE9E1;
+      --c-red: #D22B1F;
+      --c-black: #1A1A1A;
+      --c-blue: #2B4C7E;
+      --c-yellow: #E6B522;
     }
 
     body {
@@ -22,6 +23,7 @@
       padding: 0;
       overflow: hidden;
       user-select: none;
+      -webkit-touch-callout: none;
     }
 
     .seq-container {
@@ -35,31 +37,34 @@
       background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.05"/></svg>');
     }
 
-    /* Top Menu (Fluxus / Typography style) */
+    /* Top Menu */
     .menu {
       border-bottom: 4px solid var(--c-black);
       display: flex;
+      flex-wrap: wrap;
       background: var(--bg-color);
       z-index: 20;
     }
 
     .menu-btn {
-      flex: 1;
-      padding: 12px 0;
+      flex: 1 1 12%; /* Default desktop flex */
+      min-width: 60px;
+      padding: 10px 4px;
       text-align: center;
       font-weight: bold;
       text-transform: uppercase;
-      font-size: 11px;
-      letter-spacing: 1px;
+      font-size: 10px;
+      letter-spacing: 0.5px;
       border-right: 2px solid var(--c-black);
+      border-bottom: 2px solid var(--c-black);
       cursor: pointer;
-      transition: background 0.1s, color 0.1s;
       display: flex;
       flex-direction: column;
       align-items: center;
+      justify-content: center;
       gap: 6px;
+      touch-action: manipulation;
     }
-    .menu-btn:last-child { border-right: none; }
     
     .menu-btn.active {
       background: var(--c-black);
@@ -69,7 +74,7 @@
       background: rgba(0,0,0,0.05);
     }
 
-    /* Play/Stop */
+    /* Transport */
     #transport {
       background: var(--c-red);
       color: var(--bg-color);
@@ -79,13 +84,26 @@
       background: var(--c-black);
     }
 
+    /* Settings Bars */
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      padding: 8px 12px;
+      border-bottom: 2px solid var(--c-black);
+      gap: 16px;
+      font-size: 11px;
+      font-weight: bold;
+      align-items: center;
+      text-transform: uppercase;
+    }
+
     /* Canvas Area */
     #canvas {
       flex: 1;
       position: relative;
       overflow: hidden;
       cursor: crosshair;
-      /* Visual Grid: 16 columns, 12 rows */
+      touch-action: none; /* Prevents scroll on swipe */
       background-size: calc(100% / 16) calc(100% / 12);
       background-image: 
         linear-gradient(to right, rgba(0, 0, 0, 0.08) 1px, transparent 1px),
@@ -106,7 +124,7 @@
       mix-blend-mode: multiply;
     }
 
-    /* Geometric Shapes (Events) */
+    /* Geometric Shapes */
     .shape {
       position: absolute;
       transform: translate(-50%, -50%);
@@ -115,117 +133,65 @@
       transition: transform 0.05s ease-out, filter 0.05s;
     }
 
-    /* Shape specific styles */
-    .shape-sine {
-      width: 60px; height: 60px;
-      background: var(--c-red);
-      border-radius: 50%;
-    }
-    .shape-noise {
-      width: 0; height: 0;
-      border-left: 40px solid transparent;
-      border-right: 40px solid transparent;
-      border-bottom: 70px solid var(--c-black);
-    }
-    .shape-pop {
-      width: 80px; height: 40px;
-      background: var(--c-blue);
-      border-radius: 40px 40px 0 0;
-    }
-    .shape-sub {
-      width: 100%; height: 12px;
-      background: var(--c-black);
-      left: 0 !important; /* Spans full width visually */
-      transform: translateY(-50%);
-    }
-    .shape-fm {
-      width: 50px; height: 50px;
-      background: repeating-linear-gradient(
-        45deg,
-        var(--c-yellow),
-        var(--c-yellow) 5px,
-        var(--bg-color) 5px,
-        var(--bg-color) 10px
-      );
-      border: 3px solid var(--c-black);
-    }
-    .shape-error {
-      font-size: 64px;
-      font-weight: bold;
-      color: var(--c-black);
-      line-height: 1;
-      text-transform: uppercase;
-    }
+    .shape-sine { width: 40px; height: 40px; background: var(--c-red); border-radius: 50%; }
+    .shape-noise { width: 0; height: 0; border-left: 25px solid transparent; border-right: 25px solid transparent; border-bottom: 45px solid var(--c-black); }
+    .shape-pop { width: 60px; height: 30px; background: var(--c-blue); border-radius: 30px 30px 0 0; }
+    .shape-sub { width: 100%; height: 8px; background: var(--c-black); left: 0 !important; transform: translateY(-50%); }
+    .shape-fm { width: 35px; height: 35px; background: repeating-linear-gradient(45deg, var(--c-yellow), var(--c-yellow) 4px, var(--bg-color) 4px, var(--bg-color) 8px); border: 2px solid var(--c-black); }
+    .shape-error { font-size: 40px; font-weight: bold; color: var(--c-black); line-height: 1; }
 
-    /* Glitch Animation when triggered */
-    .glitch-trigger {
-      transform: translate(-50%, -50%) scale(1.4) skewX(20deg) !important;
-      filter: invert(100%);
-    }
-    .shape-sub.glitch-trigger {
-      transform: translateY(-50%) scaleY(3) !important;
-    }
+    .glitch-trigger { transform: translate(-50%, -50%) scale(1.4) skewX(20deg) !important; filter: invert(100%); }
+    .shape-sub.glitch-trigger { transform: translateY(-50%) scaleY(3) !important; }
 
-    /* Start Overlay */
-    #start-overlay {
-      position: absolute;
-      inset: 0;
-      background: var(--bg-color);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-    }
-    .big-btn {
-      font-family: 'Space Mono', monospace;
-      font-size: 24px;
-      font-weight: bold;
-      background: var(--c-black);
-      color: var(--bg-color);
-      border: none;
-      padding: 20px 40px;
-      cursor: pointer;
-      text-transform: uppercase;
-    }
+    /* Overlay */
+    #start-overlay { position: absolute; inset: 0; background: var(--bg-color); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
+    .big-btn { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: bold; background: var(--c-black); color: var(--bg-color); border: none; padding: 15px 30px; cursor: pointer; text-transform: uppercase; }
     .big-btn:hover { background: var(--c-red); }
 
+    /* Mobile overrides */
+    @media (max-width: 768px) {
+      body { padding: 0 !important; }
+      .seq-container { height: 100dvh; border: none; border-top: 2px solid var(--c-black); }
+      .menu-btn { flex: 1 1 20%; font-size: 9px; padding: 8px 2px; }
+      .controls-bar { gap: 10px; justify-content: space-between; }
+      input[type=range] { width: 60px; }
+    }
   </style>
 </head>
-<body class="p-4">
+<body class="p-0 md:p-4">
 
   <div class="seq-container">
     
     <div id="start-overlay">
       <button class="big-btn" id="start-btn">Initialize Art</button>
-      <p class="mt-4 text-xs tracking-widest uppercase opacity-50">Click canvas to compose</p>
+      <p class="mt-4 text-xs tracking-widest uppercase opacity-50">Tap canvas to compose</p>
     </div>
 
     <!-- Toolbar Menu -->
     <div class="menu">
-      <div id="transport" class="menu-btn justify-center">▶ Start</div>
+      <div id="transport" class="menu-btn justify-center" style="flex-basis:100%; font-size: 14px;">▶ Start</div>
       <div class="menu-btn active" data-type="sine">
-        <div style="width:16px;height:16px;background:var(--c-red);border-radius:50%;"></div>
+        <div style="width:12px;height:12px;background:var(--c-red);border-radius:50%;"></div>
         Sine Ping
       </div>
       <div class="menu-btn" data-type="noise">
-        <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid var(--c-black);"></div>
+        <div style="width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid var(--c-black);"></div>
         Noise Cut
       </div>
       <div class="menu-btn" data-type="pop">
-        <div style="width:16px;height:8px;background:var(--c-blue);border-radius:16px 16px 0 0;"></div>
+        <div style="width:14px;height:7px;background:var(--c-blue);border-radius:14px 14px 0 0;"></div>
         Vinyl Pop
       </div>
       <div class="menu-btn" data-type="fm">
-        <div style="width:16px;height:16px;background:var(--c-yellow);border:1px solid black;"></div>
+        <div style="width:12px;height:12px;background:var(--c-yellow);border:1px solid black;"></div>
         FM Glitch
       </div>
       <div class="menu-btn" data-type="error">
-        <span style="font-size:14px;font-weight:bold;line-height:1;">X</span>
+        <span style="font-size:12px;font-weight:bold;line-height:1;">X</span>
         Data Error
       </div>
       <div class="menu-btn" data-type="sub">
-        <div style="width:16px;height:4px;background:var(--c-black);"></div>
+        <div style="width:14px;height:3px;background:var(--c-black);"></div>
         Sub Line
       </div>
       <div class="menu-btn justify-center" id="clear-btn" style="background:#E5E5E5;">
@@ -234,29 +200,29 @@
     </div>
 
     <!-- Settings Bar -->
-    <div style="display:flex; padding: 8px 16px; background: #D1CEC5; border-bottom: 2px solid var(--c-black); gap: 24px; font-size: 12px; font-weight: bold; align-items: center; text-transform: uppercase;">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        BPM: <input type="range" id="bpm-slider" min="30" max="300" value="120" style="accent-color: var(--c-black);"> <span id="bpm-val" style="width:24px;">120</span>
+    <div class="controls-bar" style="background: #D1CEC5;">
+      <label style="display:flex; align-items:center; gap:4px;">
+        BPM: <input type="range" id="bpm-slider" min="30" max="300" value="120" style="accent-color: var(--c-black);"> <span id="bpm-val" style="width:20px;">120</span>
       </label>
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        Tone Pitch: <input type="range" id="pitch-slider" min="-24" max="24" value="0" style="accent-color: var(--c-black);"> <span id="pitch-val" style="width:24px;">0</span>
+      <label style="display:flex; align-items:center; gap:4px;">
+        Pitch: <input type="range" id="pitch-slider" min="-24" max="24" value="0" style="accent-color: var(--c-black);"> <span id="pitch-val" style="width:20px;">0</span>
       </label>
     </div>
 
     <!-- FX Bar -->
-    <div style="display:flex; padding: 8px 16px; background: var(--c-black); color: var(--bg-color); gap: 24px; font-size: 11px; font-weight: bold; align-items: center; text-transform: uppercase;">
-      <span>Master FX:</span>
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        Reverb <input type="range" id="fx-reverb" min="0" max="100" value="0" style="accent-color: var(--c-red);">
+    <div class="controls-bar" style="background: var(--c-black); color: var(--bg-color);">
+      <span class="hidden md:inline">FX:</span>
+      <label style="display:flex; align-items:center; gap:4px;">
+        Rev <input type="range" id="fx-reverb" min="0" max="100" value="0" style="accent-color: var(--c-red);">
       </label>
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        Delay <input type="range" id="fx-delay" min="0" max="100" value="0" style="accent-color: var(--c-red);">
+      <label style="display:flex; align-items:center; gap:4px;">
+        Del <input type="range" id="fx-delay" min="0" max="100" value="0" style="accent-color: var(--c-red);">
       </label>
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        Tremolo <input type="range" id="fx-tremolo" min="0" max="100" value="0" style="accent-color: var(--c-red);">
+      <label style="display:flex; align-items:center; gap:4px;">
+        Trm <input type="range" id="fx-tremolo" min="0" max="100" value="0" style="accent-color: var(--c-red);">
       </label>
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-        Tape Dist <input type="range" id="fx-dist" min="0" max="100" value="0" style="accent-color: var(--c-red);">
+      <label style="display:flex; align-items:center; gap:4px;">
+        Dst <input type="range" id="fx-dist" min="0" max="100" value="0" style="accent-color: var(--c-red);">
       </label>
     </div>
 
@@ -343,7 +309,7 @@
     });
 
     // Place Object on Canvas (with snap to grid)
-    canvas.addEventListener('mousedown', (e) => {
+    canvas.addEventListener('pointerdown', (e) => {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
