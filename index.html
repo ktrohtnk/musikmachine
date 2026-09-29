@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Avant-Garde Micro-Sequencer</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
+    :root {
+      --bg-color: #EBE9E1; /* Aged paper / warm grey */
+      --c-red: #D22B1F;    /* Avant-Garde Red */
+      --c-black: #1A1A1A;  /* Deep Black */
+      --c-blue: #2B4C7E;   /* Overprint Blue */
+      --c-yellow: #E6B522; /* Industrial Yellow */
+    }
+
+    body {
+      background-color: var(--bg-color);
+      font-family: 'Space Mono', monospace;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .seq-container {
+      width: 100%;
+      height: 600px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      border: 4px solid var(--c-black);
+      box-sizing: border-box;
+      background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)" opacity="0.05"/></svg>');
+    }
+
+    /* Top Menu (Fluxus / Typography style) */
+    .menu {
+      border-bottom: 4px solid var(--c-black);
+      display: flex;
+      background: var(--bg-color);
+      z-index: 20;
+    }
+
+    .menu-btn {
+      flex: 1;
+      padding: 12px 0;
+      text-align: center;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 1px;
+      border-right: 2px solid var(--c-black);
+      cursor: pointer;
+      transition: background 0.1s, color 0.1s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .menu-btn:last-child { border-right: none; }
+    
+    .menu-btn.active {
+      background: var(--c-black);
+      color: var(--bg-color);
+    }
+    .menu-btn:hover:not(.active) {
+      background: rgba(0,0,0,0.05);
+    }
+
+    /* Play/Stop */
+    #transport {
+      background: var(--c-red);
+      color: var(--bg-color);
+      font-size: 14px;
+    }
+    #transport.playing {
+      background: var(--c-black);
+    }
+
+    /* Canvas Area */
+    #canvas {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      cursor: crosshair;
+      /* Visual Grid: 16 columns, 12 rows */
+      background-size: calc(100% / 16) calc(100% / 12);
+      background-image: 
+        linear-gradient(to right, rgba(0, 0, 0, 0.08) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+      background-position: -1px -1px;
+    }
+
+    /* Sweeping Playhead */
+    #playhead {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 4px;
+      background-color: var(--c-red);
+      z-index: 10;
+      pointer-events: none;
+      mix-blend-mode: multiply;
+    }
+
+    /* Geometric Shapes (Events) */
+    .shape {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      mix-blend-mode: multiply;
+      pointer-events: none;
+      transition: transform 0.05s ease-out, filter 0.05s;
+    }
+
+    /* Shape specific styles */
+    .shape-sine {
+      width: 60px; height: 60px;
+      background: var(--c-red);
+      border-radius: 50%;
+    }
+    .shape-noise {
+      width: 0; height: 0;
+      border-left: 40px solid transparent;
+      border-right: 40px solid transparent;
+      border-bottom: 70px solid var(--c-black);
+    }
+    .shape-pop {
+      width: 80px; height: 40px;
+      background: var(--c-blue);
+      border-radius: 40px 40px 0 0;
+    }
+    .shape-sub {
+      width: 100%; height: 12px;
+      background: var(--c-black);
+      left: 0 !important; /* Spans full width visually */
+      transform: translateY(-50%);
+    }
+    .shape-fm {
+      width: 50px; height: 50px;
+      background: repeating-linear-gradient(
+        45deg,
+        var(--c-yellow),
+        var(--c-yellow) 5px,
+        var(--bg-color) 5px,
+        var(--bg-color) 10px
+      );
+      border: 3px solid var(--c-black);
+    }
+    .shape-error {
+      font-size: 64px;
+      font-weight: bold;
+      color: var(--c-black);
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    /* Glitch Animation when triggered */
+    .glitch-trigger {
+      transform: translate(-50%, -50%) scale(1.4) skewX(20deg) !important;
+      filter: invert(100%);
+    }
+    .shape-sub.glitch-trigger {
+      transform: translateY(-50%) scaleY(3) !important;
+    }
+
+    /* Start Overlay */
+    #start-overlay {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .big-btn {
+      font-family: 'Space Mono', monospace;
+      font-size: 24px;
+      font-weight: bold;
+      background: var(--c-black);
+      color: var(--bg-color);
+      border: none;
+      padding: 20px 40px;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    .big-btn:hover { background: var(--c-red); }
+
+  </style>
+</head>
+<body class="p-4">
+
+  <div class="seq-container">
+    
+    <div id="start-overlay">
+      <button class="big-btn" id="start-btn">Initialize Art</button>
+      <p class="mt-4 text-xs tracking-widest uppercase opacity-50">Click canvas to compose</p>
+    </div>
+
+    <!-- Toolbar Menu -->
+    <div class="menu">
+      <div id="transport" class="menu-btn justify-center">▶ Start</div>
+      <div class="menu-btn active" data-type="sine">
+        <div style="width:16px;height:16px;background:var(--c-red);border-radius:50%;"></div>
+        Sine Ping
+      </div>
+      <div class="menu-btn" data-type="noise">
+        <div style="width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:14px solid var(--c-black);"></div>
+        Noise Cut
+      </div>
+      <div class="menu-btn" data-type="pop">
+        <div style="width:16px;height:8px;background:var(--c-blue);border-radius:16px 16px 0 0;"></div>
+        Vinyl Pop
+      </div>
+      <div class="menu-btn" data-type="fm">
+        <div style="width:16px;height:16px;background:var(--c-yellow);border:1px solid black;"></div>
+        FM Glitch
+      </div>
+      <div class="menu-btn" data-type="error">
+        <span style="font-size:14px;font-weight:bold;line-height:1;">X</span>
+        Data Error
+      </div>
+      <div class="menu-btn" data-type="sub">
+        <div style="width:16px;height:4px;background:var(--c-black);"></div>
+        Sub Line
+      </div>
+      <div class="menu-btn justify-center" id="clear-btn" style="background:#E5E5E5;">
+        Clear All
+      </div>
+    </div>
+
+    <!-- Settings Bar -->
+    <div style="display:flex; padding: 8px 16px; background: #D1CEC5; border-bottom: 2px solid var(--c-black); gap: 24px; font-size: 12px; font-weight: bold; align-items: center; text-transform: uppercase;">
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        BPM: <input type="range" id="bpm-slider" min="30" max="300" value="120" style="accent-color: var(--c-black);"> <span id="bpm-val" style="width:24px;">120</span>
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        Tone Pitch: <input type="range" id="pitch-slider" min="-24" max="24" value="0" style="accent-color: var(--c-black);"> <span id="pitch-val" style="width:24px;">0</span>
+      </label>
+    </div>
+
+    <!-- FX Bar -->
+    <div style="display:flex; padding: 8px 16px; background: var(--c-black); color: var(--bg-color); gap: 24px; font-size: 11px; font-weight: bold; align-items: center; text-transform: uppercase;">
+      <span>Master FX:</span>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        Reverb <input type="range" id="fx-reverb" min="0" max="100" value="0" style="accent-color: var(--c-red);">
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        Delay <input type="range" id="fx-delay" min="0" max="100" value="0" style="accent-color: var(--c-red);">
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        Tremolo <input type="range" id="fx-tremolo" min="0" max="100" value="0" style="accent-color: var(--c-red);">
+      </label>
+      <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+        Tape Dist <input type="range" id="fx-dist" min="0" max="100" value="0" style="accent-color: var(--c-red);">
+      </label>
+    </div>
+
+    <!-- Interactive Canvas -->
+    <div id="canvas">
+      <div id="playhead"></div>
+    </div>
+
+  </div>
+
+  <script>
+    let BPM = 120;
+    let LOOP_TIME = (60 / BPM) * 4; // 4 beats per cycle
+    let globalPitchShift = 0; // Semitones shift
+
+    const COLS = 16;
+    const ROWS = 12;
+
+    // Settings listeners
+    document.getElementById('bpm-slider').addEventListener('input', (e) => {
+      BPM = parseInt(e.target.value);
+      document.getElementById('bpm-val').textContent = BPM;
+      LOOP_TIME = (60 / BPM) * 4;
+    });
+
+    document.getElementById('pitch-slider').addEventListener('input', (e) => {
+      globalPitchShift = parseInt(e.target.value);
+      document.getElementById('pitch-val').textContent = globalPitchShift > 0 ? '+' + globalPitchShift : globalPitchShift;
+    });
+
+    function getPitchRatio() {
+      return Math.pow(2, globalPitchShift / 12);
+    }
+    
+    let audioCtx;
+    let masterBus, distWet, distDry, tremoloGain, tremoloDepthNode, delaySend, reverbSend;
+    
+    // FX Listeners
+    document.getElementById('fx-reverb').addEventListener('input', (e) => {
+      if(reverbSend) reverbSend.gain.value = e.target.value / 100;
+    });
+    document.getElementById('fx-delay').addEventListener('input', (e) => {
+      if(delaySend) delaySend.gain.value = e.target.value / 100;
+    });
+    document.getElementById('fx-tremolo').addEventListener('input', (e) => {
+      if(tremoloDepthNode && tremoloGain) {
+        const val = e.target.value / 100;
+        tremoloDepthNode.gain.value = val;
+        tremoloGain.gain.value = 1.0 - (val / 2); // Compensate volume
+      }
+    });
+    document.getElementById('fx-dist').addEventListener('input', (e) => {
+      if(distWet && distDry) {
+        const val = e.target.value / 100;
+        distWet.gain.value = val;
+        distDry.gain.value = 1.0 - val;
+      }
+    });
+
+    let isPlaying = false;
+    let events = []; // { id, type, xPercent, yPercent, el, scheduledLoopCount }
+    let currentSoundType = 'sine';
+    
+    let loopCount = 0;
+    let startTime = 0;
+    let requestAnimId;
+
+    const canvas = document.getElementById('canvas');
+    const playhead = document.getElementById('playhead');
+    const transport = document.getElementById('transport');
+
+    // UI Selections
+    document.querySelectorAll('.menu-btn[data-type]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.menu-btn[data-type]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentSoundType = btn.dataset.type;
+      });
+    });
+
+    document.getElementById('clear-btn').addEventListener('click', () => {
+      events.forEach(e => e.el.remove());
+      events = [];
+    });
+
+    // Place Object on Canvas (with snap to grid)
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      // Snap logic
+      const colWidth = rect.width / COLS;
+      const rowHeight = rect.height / ROWS;
+      
+      const snappedX = Math.floor(x / colWidth) * colWidth + (colWidth / 2);
+      const snappedY = Math.floor(y / rowHeight) * rowHeight + (rowHeight / 2);
+      
+      const xPercent = snappedX / rect.width;
+      const yPercent = snappedY / rect.height;
+
+      createEvent(xPercent, yPercent, currentSoundType);
+    });
+
+    function createEvent(xPercent, yPercent, type) {
+      const el = document.createElement('div');
+      el.className = `shape shape-${type}`;
+      
+      if (type === 'error') {
+        const letters = ['X', 'A', '0', '1', '!', '?'];
+        el.textContent = letters[Math.floor(Math.random() * letters.length)];
+      }
+
+      // X mapping is time. Y mapping is pitch/parameter.
+      el.style.left = `${xPercent * 100}%`;
+      el.style.top = `${yPercent * 100}%`;
+      
+      canvas.appendChild(el);
+
+      events.push({
+        id: Date.now() + Math.random(),
+        type,
+        xPercent,
+        yPercent,
+        el,
+        scheduledLoopCount: -1
+      });
+    }
+
+    // --- Audio System ---
+    
+    document.getElementById('start-btn').addEventListener('click', () => {
+      document.getElementById('start-overlay').style.display = 'none';
+      initAudio();
+    });
+
+    transport.addEventListener('click', () => {
+      if (!audioCtx) initAudio();
+      
+      if (isPlaying) {
+        isPlaying = false;
+        transport.textContent = '▶ Start';
+        transport.classList.remove('playing');
+        cancelAnimationFrame(requestAnimId);
+      } else {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        isPlaying = true;
+        transport.textContent = '■ Stop';
+        transport.classList.add('playing');
+        startTime = audioCtx.currentTime;
+        loopCount = 0;
+        schedulerLoop();
+      }
+    });
+
+    function initAudio() {
+      if(audioCtx) return;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      
+      masterBus = audioCtx.createGain();
+      
+      // 1. Distortion Insert (Muffled Analog)
+      const distShaper = audioCtx.createWaveShaper();
+      distShaper.curve = makeDistortionCurve(100);
+      const distFilter = audioCtx.createBiquadFilter();
+      distFilter.type = 'lowpass';
+      distFilter.frequency.value = 600; // Muffled tone
+      
+      distDry = audioCtx.createGain();
+      distWet = audioCtx.createGain();
+      distWet.gain.value = document.getElementById('fx-dist').value / 100;
+      distDry.gain.value = 1.0 - distWet.gain.value;
+      
+      masterBus.connect(distDry);
+      masterBus.connect(distShaper);
+      distShaper.connect(distFilter);
+      distFilter.connect(distWet);
+      
+      const postDist = audioCtx.createGain();
+      distDry.connect(postDist);
+      distWet.connect(postDist);
+      
+      // 2. Tremolo Insert
+      tremoloGain = audioCtx.createGain();
+      const tremoloVal = document.getElementById('fx-tremolo').value / 100;
+      tremoloGain.gain.value = 1.0 - (tremoloVal / 2);
+      
+      const tremoloLfo = audioCtx.createOscillator();
+      tremoloLfo.frequency.value = 6; // 6Hz
+      
+      tremoloDepthNode = audioCtx.createGain();
+      tremoloDepthNode.gain.value = tremoloVal;
+      
+      tremoloLfo.connect(tremoloDepthNode);
+      tremoloDepthNode.connect(tremoloGain.gain);
+      tremoloLfo.start();
+      
+      postDist.connect(tremoloGain);
+      const postInsert = tremoloGain;
+
+      // 3. Delay Send
+      delaySend = audioCtx.createGain();
+      delaySend.gain.value = document.getElementById('fx-delay').value / 100;
+      const delayNode = audioCtx.createDelay(2.0);
+      delayNode.delayTime.value = 0.35; // 350ms
+      const delayFeedback = audioCtx.createGain();
+      delayFeedback.gain.value = 0.5; // feedback
+      
+      postInsert.connect(delaySend);
+      delaySend.connect(delayNode);
+      delayNode.connect(delayFeedback);
+      delayFeedback.connect(delayNode);
+      delayNode.connect(audioCtx.destination);
+      
+      // 4. Reverb Send
+      reverbSend = audioCtx.createGain();
+      reverbSend.gain.value = document.getElementById('fx-reverb').value / 100;
+      const reverbNode = audioCtx.createConvolver();
+      reverbNode.buffer = createReverbIR(audioCtx);
+      
+      postInsert.connect(reverbSend);
+      reverbSend.connect(reverbNode);
+      reverbNode.connect(audioCtx.destination);
+      
+      // Dry output
+      postInsert.connect(audioCtx.destination);
+    }
+
+    function makeDistortionCurve(amount) {
+      const k = typeof amount === 'number' ? amount : 50;
+      const n_samples = 44100;
+      const curve = new Float32Array(n_samples);
+      const deg = Math.PI / 180;
+      for (let i = 0; i < n_samples; ++i) {
+        const x = i * 2 / n_samples - 1;
+        curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
+      }
+      return curve;
+    }
+
+    function createReverbIR(ctx) {
+      const length = ctx.sampleRate * 2.5; 
+      const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+      for (let c = 0; c < 2; c++) {
+        const channelData = impulse.getChannelData(c);
+        for (let i = 0; i < length; i++) {
+          channelData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.4));
+        }
+      }
+      return impulse;
+    }
+
+    // Main scheduling and animation loop
+    function schedulerLoop() {
+      if(!isPlaying) return;
+      
+      const currentTime = audioCtx.currentTime - startTime;
+      const currentLoopPos = currentTime % LOOP_TIME;
+      const currentLoopCount = Math.floor(currentTime / LOOP_TIME);
+
+      // Update Playhead Visual
+      const progress = currentLoopPos / LOOP_TIME;
+      playhead.style.left = `${progress * 100}%`;
+
+      // Schedule Audio Lookahead
+      // We look ahead by 0.1 seconds
+      const lookaheadTime = 0.1;
+      
+      events.forEach(ev => {
+        const eventTimeInLoop = ev.xPercent * LOOP_TIME;
+        
+        // Is the event coming up in the next lookahead window?
+        // Case 1: normal within this loop
+        if (eventTimeInLoop >= currentLoopPos && eventTimeInLoop < currentLoopPos + lookaheadTime) {
+          if (ev.scheduledLoopCount < currentLoopCount) {
+            scheduleSound(ev, startTime + (currentLoopCount * LOOP_TIME) + eventTimeInLoop);
+            ev.scheduledLoopCount = currentLoopCount;
+          }
+        }
+        // Case 2: event is at the beginning of the NEXT loop, and we are at the very end of CURRENT loop
+        else if (currentLoopPos + lookaheadTime >= LOOP_TIME) {
+          const overlap = (currentLoopPos + lookaheadTime) - LOOP_TIME;
+          if (eventTimeInLoop < overlap) {
+            if (ev.scheduledLoopCount < currentLoopCount + 1) {
+              scheduleSound(ev, startTime + ((currentLoopCount + 1) * LOOP_TIME) + eventTimeInLoop);
+              ev.scheduledLoopCount = currentLoopCount + 1;
+            }
+          }
+        }
+
+        // Trigger visual glitch exactly when playhead crosses
+        if (Math.abs(progress - ev.xPercent) < 0.015) {
+          ev.el.classList.add('glitch-trigger');
+        } else {
+          ev.el.classList.remove('glitch-trigger');
+        }
+      });
+
+      requestAnimId = requestAnimationFrame(schedulerLoop);
+    }
+
+    // --- Extreme Micro-Sound Generators ---
+
+    function scheduleSound(ev, time) {
+      const { type, yPercent } = ev;
+      
+      // Pitch/Filter based on Y position (0 = top/high, 1 = bottom/low)
+      const invY = 1.0 - yPercent;
+      const pitchRatio = getPitchRatio(); // Apply global tone pitch
+
+      if (type === 'sine') {
+        // High-pitched 5ms sine burst
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = (1000 + (invY * 4000)) * pitchRatio; // 1k to 5k
+        osc.connect(gain);
+        gain.connect(masterBus);
+        
+        gain.gain.setValueAtTime(0, time);
+        gain.gain.linearRampToValueAtTime(0.8, time + 0.001);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.015);
+        
+        osc.start(time);
+        osc.stop(time + 0.02);
+      }
+      
+      else if (type === 'noise') {
+        // Clicks and Cuts white noise slice
+        const bufferSize = audioCtx.sampleRate * 0.05; // 50ms buffer
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = (500 + (invY * 8000)) * pitchRatio;
+        filter.Q.value = 10; // Sharp click
+        
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(1, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.02);
+        
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(masterBus);
+        noise.start(time);
+      }
+      
+      else if (type === 'pop') {
+        // Vinyl pop / static crackle
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'square';
+        
+        // Rapidly drop frequency to create a click/thump
+        osc.frequency.setValueAtTime(8000 * pitchRatio, time);
+        osc.frequency.exponentialRampToValueAtTime(10 * pitchRatio, time + 0.005);
+        
+        gain.gain.setValueAtTime(0.5, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.005);
+        
+        osc.connect(gain);
+        gain.connect(masterBus);
+        osc.start(time);
+        osc.stop(time + 0.01);
+      }
+      
+      else if (type === 'fm') {
+        // FM metallic glitch
+        const carrier = audioCtx.createOscillator();
+        const mod = audioCtx.createOscillator();
+        const modGain = audioCtx.createGain();
+        const outGain = audioCtx.createGain();
+        
+        carrier.type = 'sine';
+        mod.type = 'sawtooth';
+        
+        const baseFreq = (200 + (invY * 800)) * pitchRatio;
+        carrier.frequency.setValueAtTime(baseFreq, time);
+        mod.frequency.setValueAtTime(baseFreq * 3.14, time); // Inharmonic ratio
+        
+        modGain.gain.setValueAtTime(1000 * pitchRatio, time);
+        modGain.gain.exponentialRampToValueAtTime(10 * pitchRatio, time + 0.05);
+        
+        mod.connect(modGain);
+        modGain.connect(carrier.frequency);
+        
+        carrier.connect(outGain);
+        outGain.connect(masterBus);
+        
+        outGain.gain.setValueAtTime(0, time);
+        outGain.gain.linearRampToValueAtTime(0.6, time + 0.005);
+        outGain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+        
+        carrier.start(time);
+        mod.start(time);
+        carrier.stop(time + 0.06);
+        mod.stop(time + 0.06);
+      }
+      
+      else if (type === 'error') {
+        // Digital bit-crush representation using harsh distortion
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const shaper = audioCtx.createWaveShaper();
+        
+        osc.type = 'sawtooth';
+        osc.frequency.value = (50 + (invY * 200)) * pitchRatio;
+        
+        // Extreme hard clipping
+        const curve = new Float32Array(44100);
+        for(let i=0; i<44100; i++) {
+          const x = i * 2 / 44100 - 1;
+          curve[i] = x < 0 ? -1 : 1; 
+        }
+        shaper.curve = curve;
+        
+        osc.connect(shaper);
+        shaper.connect(gain);
+        gain.connect(masterBus);
+        
+        gain.gain.setValueAtTime(0.2, time);
+        gain.gain.setValueAtTime(0, time + 0.02); // 20ms burst
+        
+        osc.start(time);
+        osc.stop(time + 0.03);
+      }
+      
+      else if (type === 'sub') {
+        // Deep continuous line, played as a short 808 kick/thump when passed
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        
+        const freq = (30 + (invY * 60)) * pitchRatio; // 30Hz to 90Hz
+        osc.frequency.setValueAtTime(freq, time);
+        
+        osc.connect(gain);
+        gain.connect(masterBus);
+        
+        gain.gain.setValueAtTime(0.8, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
+        
+        osc.start(time);
+        osc.stop(time + 0.4);
+      }
+    }
+
+    // Initialize with a few aesthetic default shapes
+    createEvent(0.1, 0.4, 'noise');
+    createEvent(0.2, 0.2, 'sine');
+    createEvent(0.3, 0.8, 'error');
+    createEvent(0.45, 0.5, 'pop');
+    createEvent(0.6, 0.3, 'fm');
+    createEvent(0.8, 0.6, 'noise');
+    createEvent(0.9, 0.1, 'error');
+
+  </script>
+</body>
+</html>
